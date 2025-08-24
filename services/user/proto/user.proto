@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "services/user/proto";
+
+import "google/protobuf/timestamp.proto";
+
+// User service definition
+service UserService {
+  // Create a new user
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  
+  // Get user by ID
+  rpc GetUserByID(GetUserByIDRequest) returns (GetUserByIDResponse);
+  
+  // Get user by email
+  rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserByEmailResponse);
+  
+  // Update user
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  
+  // Delete user
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  
+  // List users with pagination
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  
+  // Health check
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// User entity
+message User {
+  string id = 1;
+  string email = 2;
+  string first_name = 3;
+  string last_name = 4;
+  string username = 5;
+  bool is_active = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// Create user request
+message CreateUserRequest {
+  string email = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string username = 4;
+  string password = 5;
+}
+
+// Create user response
+message CreateUserResponse {
+  User user = 1;
+  string message = 2;
+}
+
+// Get user by ID request
+message GetUserByIDRequest {
+  string id = 1;
+}
+
+// Get user by ID response
+message GetUserByIDResponse {
+  User user = 1;
+}
+
+// Get user by email request
+message GetUserByEmailRequest {
+  string email = 1;
+}
+
+// Get user by email response
+message GetUserByEmailResponse {
+  User user = 1;
+}
+
+// Update user request
+message UpdateUserRequest {
+  string id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string username = 4;
+  bool is_active = 5;
+}
+
+// Update user response
+message UpdateUserResponse {
+  User user = 1;
+  string message = 2;
+}
+
+// Delete user request
+message DeleteUserRequest {
+  string id = 1;
+}
+
+// Delete user response
+message DeleteUserResponse {
+  string message = 1;
+}
+
+// List users request
+message ListUsersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string search = 3;
+  bool is_active = 4;
+}
+
+// List users response
+message ListUsersResponse {
+  repeated User users = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  int32 total_pages = 5;
+}
+
+// Health check request
+message HealthCheckRequest {}
+
+// Health check response
+message HealthCheckResponse {
+  string status = 1;
+  string message = 2;
+}
+

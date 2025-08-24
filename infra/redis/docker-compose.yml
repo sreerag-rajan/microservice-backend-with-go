@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis-server
+    restart: unless-stopped
+    
+    # Environment variables for configuration
+    environment:
+      # Redis authentication
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis123}
+      
+      # Memory configuration
+      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-256mb}
+      REDIS_MAXMEMORY_POLICY: ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+      
+      # Network configuration
+      REDIS_BIND: ${REDIS_BIND:-0.0.0.0}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      
+      # Persistence configuration
+      REDIS_SAVE: ${REDIS_SAVE:-900 1 300 10 60 10000}
+      REDIS_APPENDONLY: ${REDIS_APPENDONLY:-yes}
+      REDIS_APPENDFSYNC: ${REDIS_APPENDFSYNC:-everysec}
+      
+      # Performance tuning
+      REDIS_TCP_KEEPALIVE: ${REDIS_TCP_KEEPALIVE:-300}
+      REDIS_TIMEOUT: ${REDIS_TIMEOUT:-0}
+      REDIS_TCP_BACKLOG: ${REDIS_TCP_BACKLOG:-511}
+    
+    # Port mappings
+    ports:
+      - "6379:6379"   # Redis protocol port
+    
+    # Persistent volumes
+    volumes:
+      - redis_data:/data
+      - redis_logs:/var/log/redis
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    
+    # Command with configuration file
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-redis123}
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    
+    # Network configuration
+    networks:
+      - redis-network
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+# Named volumes for data persistence
+volumes:
+  redis_data:
+    driver: local
+  redis_logs:
+    driver: local
+
+# Custom network for microservices communication
+networks:
+  redis-network:
+    driver: bridge
+    name: redis-network

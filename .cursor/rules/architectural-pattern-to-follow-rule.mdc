@@ -1,0 +1,339 @@
+---
+description: Use this rule whenever code is written so the layers responsibility is understood and the code reflects that
+globs:
+alwaysApply: true
+---
+# Microservices Architecture Development Rules
+
+## Overview
+This project follows a layered microservices architecture with three distinct layers. Each layer has specific responsibilities and constraints to maintain code structure and independence.
+
+## Layer Architecture
+
+### 1. Gateway Layer (`/gateway`)
+**Purpose**: Single entry point and reverse proxy for all client requests.
+
+**Responsibilities**:
+- Route incoming HTTP requests to appropriate Application Services
+- Handle load balancing and request distribution
+- Implement rate limiting and basic security
+- Manage SSL/TLS termination
+- Provide health check endpoints
+- Handle CORS and cross-origin requests
+
+**Code Organization**:
+```
+gateway/
+├── main.go                 # Application entry point
+├── config/                 # Configuration management
+├── middleware/             # Gateway-specific middleware
+├── routing/                # Route definitions and handlers
+├── health/                 # Health check endpoints
+└── utils/                  # Gateway utilities
+```
+
+**Technology Constraints**:
+- **Language**: Go
+- **Framework**: Standard HTTP server or lightweight framework (Gin, Echo)
+- **Database Access**: None (no direct database connections)
+- **External Services**: Only Application Service Layer communication
+
+**DO NOT**:
+- Implement business logic
+- Access databases directly
+- Make external API calls
+- Store application state
+
+### 2. Application Service Layer (`/apps`)
+**Purpose**: Client-facing services that orchestrate business logic and handle client requirements.
+
+**Responsibilities**:
+- Implement client-facing REST APIs
+- Handle authentication and authorization
+- Orchestrate business workflows
+- Manage client sessions and state
+- Implement API versioning
+- Handle request/response transformation
+- Publish events to message queues
+
+**Code Organization**:
+```
+apps/
+├── user-management/        # User management application service
+│   ├── main.go
+│   ├── handlers/           # HTTP handlers
+│   ├── middleware/         # Auth, logging, validation
+│   ├── models/             # Request/response models
+│   ├── services/           # Business logic orchestration
+│   ├── cache/              # Caching layer
+│   └── config/
+├── rbac-system/           # RBAC application service
+│   ├── main.go
+│   ├── handlers/
+│   ├── middleware/
+│   ├── models/
+│   ├── services/
+│   ├── cache/              # Caching layer
+│   └── config/
+└── notifications/         # Notification application service
+    ├── main.go
+    ├── handlers/
+    ├── middleware/
+    ├── models/
+    ├── services/
+    ├── cache/              # Caching layer
+    └── config/
+```
+
+**Technology Constraints**:
+- **Language**: Go
+- **Framework**: HTTP framework (Gin, Echo, Fiber)
+- **Database Access**: None (communicate via gRPC to Service Layer)
+- **Communication**: gRPC client to Service Layer, HTTP to clients
+- **Message Queues**: RabbitMQ for event publishing
+
+**DO**:
+- Implement REST APIs
+- Handle authentication/authorization
+- Orchestrate business workflows
+- Transform data between client and service layer
+- Publish events for async processing
+
+**DO NOT**:
+- Access databases directly
+- Implement core business logic
+- Store persistent data
+- Make direct external API calls
+
+### 3. Service Layer (`/services`)
+**Purpose**: Core business services with direct data access and reusable business logic.
+
+**Responsibilities**:
+- Implement core business logic
+- Provide gRPC services
+- Handle database operations
+- Manage data models and entities
+- Implement caching strategies
+- Handle external service integrations
+- Process async events from queues
+
+**Code Organization**:
+```
+services/
+├── user-service/          # User management core service
+│   ├── main.go
+│   ├── proto/             # gRPC protocol definitions
+│   ├── handlers/          # gRPC service implementations
+│   ├── models/            # Data models and entities
+│   ├── repository/        # Database access layer
+│   ├── business/          # Core business logic
+│   ├── cache/             # Caching layer
+│   └── config/
+├── auth-service/          # Authentication core service
+├── permission-service/    # Permission management service
+└── notification-service/  # Notification core service
+```
+
+**Technology Constraints**:
+- **Language**: Go
+- **Framework**: gRPC server
+- **Database Access**: Direct PostgreSQL connections
+- **Caching**: Redis for performance optimization
+- **Communication**: gRPC server, RabbitMQ consumer
+
+**DO**:
+- Implement core business logic
+- Handle database operations
+- Provide gRPC services
+- Manage data models
+- Implement caching
+- Process async events
+
+**DO NOT**:
+- Expose HTTP endpoints directly
+- Handle client authentication
+- Implement client-specific logic
+- Make assumptions about client requirements
+
+### 4. Shared Packages Layer (`/pkgs`)
+**Purpose**: Reusable code and libraries shared across different layers to follow the DRY principle.
+
+**Responsibilities**:
+- Provide reusable middleware components
+- Centralize database connection logic
+- Share gRPC utilities and helpers
+- Provide message queue utilities
+- Centralize common utilities and models
+- Reduce code duplication across services
+
+**Code Organization**:
+```
+pkgs/
+├── middleware/            # Reusable middleware components
+│   ├── auth/              # Authentication middleware
+│   ├── logging/           # Logging middleware
+│   ├── validation/        # Request validation middleware
+│   └── cors/              # CORS handling middleware
+├── database/              # Database connection and utilities
+│   ├── postgres/          # PostgreSQL connection logic
+│   ├── redis/             # Redis connection logic
+│   └── migrations/        # Database migration utilities
+├── grpc/                  # gRPC utilities and helpers
+│   ├── client/            # gRPC client utilities
+│   ├── server/            # gRPC server utilities
+│   └── interceptors/      # gRPC interceptors
+├── messaging/             # Message queue utilities
+│   ├── rabbitmq/          # RabbitMQ connection and helpers
+│   └── events/            # Event definitions and handlers
+├── utils/                 # Common utilities
+│   ├── config/            # Configuration utilities
+│   ├── logger/            # Logging utilities
+│   ├── errors/            # Error handling utilities
+│   └── validators/        # Validation utilities
+└── models/                # Shared data models
+    └── common/            # Common data structures
+```
+
+**Technology Constraints**:
+- **Language**: Go
+- **Framework**: Standard library and common Go packages
+- **Dependencies**: Minimal external dependencies
+- **Usage**: Imported by other layers as needed
+
+**DO**:
+- Provide reusable utilities and helpers
+- Centralize common functionality
+- Maintain backward compatibility
+- Follow Go package naming conventions
+- Keep dependencies minimal
+
+**DO NOT**:
+- Implement business logic
+- Create circular dependencies
+- Store application state
+- Make assumptions about usage context
+
+## Communication Patterns
+
+### Synchronous Communication
+- **Client → Gateway**: HTTP requests
+- **Gateway → Application Services**: HTTP routing
+- **Application Services → Service Layer**: gRPC calls
+
+### Asynchronous Communication
+- **Application Services → RabbitMQ**: Event publishing
+- **RabbitMQ → Service Layer**: Event consumption
+
+## Development Guidelines
+
+### 1. Layer Independence
+- Each layer should be independently deployable
+- No circular dependencies between layers
+- Clear interfaces between layers
+- Version APIs appropriately
+
+### 2. Error Handling
+- **Gateway**: Handle network errors, return appropriate HTTP status codes
+- **Application Services**: Transform service errors to client-friendly responses
+- **Service Layer**: Return detailed error information for debugging
+
+### 3. Configuration Management
+- Use environment variables for configuration
+- Implement configuration validation
+- Separate configs for different environments
+- Use secrets management for sensitive data
+
+### 4. Logging and Monitoring
+- Implement structured logging
+- Use correlation IDs for request tracing
+- Monitor service health and performance
+- Log at appropriate levels (DEBUG, INFO, WARN, ERROR)
+
+### 5. Testing Strategy
+- **Gateway**: Integration tests for routing and middleware
+- **Application Services**: Unit tests for business logic, integration tests for APIs
+- **Service Layer**: Unit tests for business logic, integration tests for gRPC
+
+### 6. Security
+- **Gateway**: Implement rate limiting, basic security headers
+- **Application Services**: Handle authentication, authorization, input validation
+- **Service Layer**: Validate business rules, secure database access
+
+## File Naming Conventions
+
+### Go Files
+- Use snake_case for file names
+- Use descriptive names that indicate purpose
+- Group related functionality in packages
+
+### Configuration Files
+- Use `.env` for environment variables
+- Use `.yaml` or `.json` for structured configs
+- Use `.proto` for gRPC definitions
+
+### Database Files
+- Use snake_case for table and column names
+- Use descriptive names for constraints and indexes
+- Version migration files appropriately
+
+## Dependencies and Imports
+
+### Gateway Layer
+```go
+// Allowed imports
+import (
+    "net/http"
+    "github.com/gin-gonic/gin"  // or similar HTTP framework
+    "your-project/apps/*"       // Application services
+    "your-project/pkgs/*"       // Shared packages
+)
+```
+
+### Application Service Layer
+```go
+// Allowed imports
+import (
+    "google.golang.org/grpc"    // gRPC client
+    "github.com/streadway/amqp" // RabbitMQ
+    "your-project/services/*"   // Service layer
+    "your-project/pkgs/*"       // Shared packages
+)
+```
+
+### Service Layer
+```go
+// Allowed imports
+import (
+    "database/sql"              // Database access
+    "github.com/go-redis/redis" // Redis client
+    "github.com/streadway/amqp" // RabbitMQ
+    "google.golang.org/grpc"    // gRPC server
+    "your-project/pkgs/*"       // Shared packages
+)
+```
+
+## Common Anti-Patterns to Avoid
+
+1. **Database Access in Application Services**: Always go through Service Layer
+2. **Business Logic in Gateway**: Keep gateway focused on routing
+3. **Direct External API Calls**: Route through appropriate layer
+4. **Tight Coupling**: Use interfaces and dependency injection
+5. **Shared State**: Use external services (Redis, Database) for state
+6. **Synchronous Cross-Service Calls**: Use async patterns when possible
+
+## Migration and Deployment
+
+### Database Migrations
+- Keep migrations in Service Layer
+- Version migrations appropriately
+- Test migrations in staging environment
+- Use transaction rollback capabilities
+
+### Service Deployment
+- Deploy layers independently
+- Use containerization (Docker)
+- Implement health checks
+- Use blue-green or rolling deployments
+- Monitor deployment metrics
+
+This architecture ensures maintainable, scalable, and independently deployable microservices while maintaining clear separation of concerns and responsibilities.

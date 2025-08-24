@@ -1,0 +1,65 @@
+.env.*
+!.env.example
+
+# Go build artifacts
+/bin/
+/build/
+/dist/
+/out/
+/*.exe
+/*.exe~
+/*.dll
+/*.so
+/*.dylib
+/*.test
+*.out
+
+# Go modules cache
+/pkg/mod/
+/pkg/sumdb/
+
+# Dependency directories (vendor/)
+vendor/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# Coverage files
+coverage.*
+*.coverprofile
+
+# Docker artifacts
+docker-compose.override.yml
+docker-compose.*.yml
+.docker/
+**/docker-data/
+**/docker-volume/
+**/docker-logs/
+**/tmp/
+**/.dockerignore
+
+# Ignore RabbitMQ persistent data and logs (if not in version control)
+infra/rabbitmq/rabbitmq_data/
+infra/rabbitmq/rabbitmq_logs/
+
+# Ignore local configuration overrides
+*.local
+.env.local
+.envrc
+
+# Ignore test output
+testdata/

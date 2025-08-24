@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: rabbitmq-server
+    restart: unless-stopped
+
+    env_file:
+      - .env.local
+    
+    # Environment variables for authentication and configuration
+    environment:
+      # Default user credentials
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+      
+      # Additional configuration
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-SWQOKODSQALRPCLNMEQG}
+      RABBITMQ_NODE_NAME: ${RABBITMQ_NODE_NAME:-rabbit@rabbitmq-server}
+      
+      # Enable management plugin (included in management image)
+      RABBITMQ_MANAGEMENT_LOAD_DEFINITIONS: /etc/rabbitmq/definitions.json
+    
+    # Port mappings
+    ports:
+      - "5672:5672"   # AMQP protocol port
+      - "15672:15672" # Management UI port
+      - "15692:15692" # Prometheus metrics port
+    
+    # Persistent volumes
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_logs:/var/log/rabbitmq
+      - ./definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    
+    # Network configuration
+    networks:
+      - rabbitmq-network
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+# Named volumes for data persistence
+volumes:
+  rabbitmq_data:
+    driver: local
+  rabbitmq_logs:
+    driver: local
+
+# Custom network for microservices communication
+networks:
+  rabbitmq-network:
+    driver: bridge
+    name: rabbitmq-network
