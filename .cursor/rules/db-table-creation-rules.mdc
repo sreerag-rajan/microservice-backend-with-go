@@ -1,0 +1,214 @@
+---
+description: Whenever there is migration scripts or db schema updates involved this rule should be implemented
+globs:
+alwaysApply: false
+---
+# Database Table Creation Rules
+
+## Overview
+This project uses PostgreSQL database with schema-based organization. Each service typically has its own schema, with exceptions where services share schemas (e.g., auth service and user service share a schema).
+
+## Schema Naming Convention
+- All schemas must use the prefix `sr_`
+- Schema names follow the pattern: `sr_<schema_name>`
+- Example: `sr_auth`, `sr_user`, `sr_notifications`
+
+## Table Structure Requirements
+All tables must include these standard fields:
+- `id` - integer PRIMARY KEY
+- `uuid` - uuid UNIQUE
+- `meta` - JSONB
+- `created_at` - timestamptz
+- `updated_at` - timestamptz
+- `deleted_at` - timestamptz
+
+## Foreign Key Rules
+
+### Intra-Schema Relationships
+- Tables within the same schema can use foreign keys with integer primary keys
+- Standard foreign key constraints are allowed and recommended
+
+### Inter-Service Relationships
+- Tables across different services cannot use foreign key constraints
+- Use UUID references instead of integer primary keys
+- Example: User table belongs to auth service, so user service tables must reference `userUuid` without foreign key constraints
+
+## Global Database Infrastructure
+
+### Global Migrations (`/migrations/`)
+The project includes global migrations that provide common database infrastructure:
+
+#### Extensions (`001_install_extensions.sql`)
+- **uuid-ossp**: Provides `gen_random_uuid()` for UUID generation
+- **pgcrypto**: Cryptographic functions for password hashing and encryption
+- **btree_gin**: GIN indexes for UUID columns and performance optimization
+- **unaccent**: Text search capabilities (optional, commented out)
+
+#### Utility Functions (`002_create_utility_functions.sql`)
+- **`update_updated_at_column()`**: Auto-updates `updated_at` timestamp (use in triggers)
+- **`generate_uuid()`**: Wrapper for `gen_random_uuid()` 
+- **`is_valid_uuid(uuid_string TEXT)`**: Validates UUID format
+- **`get_utc_timestamp()`**: Returns current UTC timestamp
+- **`soft_delete_record(table_name TEXT, record_id INTEGER)`**: Generic soft delete
+- **`restore_deleted_record(table_name TEXT, record_id INTEGER)`**: Restore soft deleted records
+- **`record_exists_and_active(table_name TEXT, record_id INTEGER)`**: Check record existence
+
+#### Index Utilities (`003_create_common_indexes.sql`)
+- **`add_common_indexes(schema_name TEXT, table_name TEXT)`**: Adds standard indexes (uuid, created_at, updated_at, deleted_at)
+- **`add_uuid_fk_indexes(schema_name TEXT, table_name TEXT, column_name TEXT)`**: UUID foreign key indexes
+- **`add_search_index(schema_name TEXT, table_name TEXT, column_name TEXT)`**: Full-text and trigram search indexes
+
+### Migration Order Requirements
+**IMPORTANT**: Global migrations must be run BEFORE any service-specific migrations:
+1. Global migrations (`/migrations/`)
+2. Service migrations (`/services/*/migrations/`)
+
+## Database Utilities and Optimization
+Service migration scripts should leverage global utilities:
+
+### Table Creation with Global Functions
+```sql
+CREATE TABLE sr_my_service.my_table (
+    id SERIAL PRIMARY KEY,
+    uuid UUID UNIQUE DEFAULT generate_uuid(),
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT get_utc_timestamp(),
+    updated_at TIMESTAMPTZ DEFAULT get_utc_timestamp(),
+    deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+-- Add common indexes using global utility
+SELECT add_common_indexes('sr_my_service', 'my_table');
+
+-- Add search index for text columns
+SELECT add_search_index('sr_my_service', 'my_table', 'name');
+
+-- Create trigger for auto-updating updated_at
+CREATE TRIGGER update_my_table_updated_at 
+    BEFORE UPDATE ON sr_my_service.my_table 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```
+
+### Using Global Soft Delete Functions
+```sql
+-- Soft delete a record
+SELECT soft_delete_record('sr_my_service.my_table', 123);
+
+-- Restore a soft deleted record  
+SELECT restore_deleted_record('sr_my_service.my_table', 123);
+
+-- Check if record exists and is active
+SELECT record_exists_and_active('sr_my_service.my_table', 123);
+```
+
+## Soft Delete Behavior
+- All deletions are soft deletes by default
+- `deleted_at` field is NULL until explicitly set by application code
+- Soft delete behavior applies unless explicitly specified otherwise
+- Use global utility functions for soft delete operations
+
+## Best Practices and Common Patterns
+
+### Standard Table Creation Pattern
+```sql
+-- 1. Create table with standard fields
+CREATE TABLE sr_my_service.my_table (
+    id SERIAL PRIMARY KEY,
+    uuid UUID UNIQUE DEFAULT generate_uuid(),
+    name VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    meta JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT get_utc_timestamp(),
+    updated_at TIMESTAMPTZ DEFAULT get_utc_timestamp(),
+    deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+-- 2. Add common indexes using global utility
+SELECT add_common_indexes('sr_my_service', 'my_table');
+
+-- 3. Add service-specific indexes
+CREATE INDEX idx_my_table_name ON sr_my_service.my_table(name);
+CREATE INDEX idx_my_table_active ON sr_my_service.my_table(is_active) WHERE is_active = true;
+
+-- 4. Create trigger for auto-updating updated_at
+CREATE TRIGGER update_my_table_updated_at 
+    BEFORE UPDATE ON sr_my_service.my_table 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```
+
+### UUID Foreign Key Pattern (Inter-Service)
+```sql
+-- For tables that reference other services (no FK constraint)
+CREATE TABLE sr_my_service.user_profiles (
+    id SERIAL PRIMARY KEY,
+    uuid UUID UNIQUE DEFAULT generate_uuid(),
+    user_uuid UUID NOT NULL, -- References sr_auth.users (no FK constraint)
+    profile_data JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT get_utc_timestamp(),
+    updated_at TIMESTAMPTZ DEFAULT get_utc_timestamp(),
+    deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+-- Add index for UUID foreign key
+SELECT add_uuid_fk_indexes('sr_my_service', 'user_profiles', 'user_uuid');
+```
+
+### Search-Optimized Table Pattern
+```sql
+-- For tables that need full-text search
+CREATE TABLE sr_my_service.articles (
+    id SERIAL PRIMARY KEY,
+    uuid UUID UNIQUE DEFAULT generate_uuid(),
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    author_uuid UUID NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT get_utc_timestamp(),
+    updated_at TIMESTAMPTZ DEFAULT get_utc_timestamp(),
+    deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+-- Add common indexes
+SELECT add_common_indexes('sr_my_service', 'articles');
+
+-- Add search indexes for title and content
+SELECT add_search_index('sr_my_service', 'articles', 'title');
+SELECT add_search_index('sr_my_service', 'articles', 'content');
+
+-- Add UUID foreign key index
+SELECT add_uuid_fk_indexes('sr_my_service', 'articles', 'author_uuid');
+```
+
+### Migration File Naming Convention
+- Use descriptive names: `001_create_my_table.sql`, `002_add_my_index.sql`
+- Include migration number prefix for ordering
+- Use snake_case for file names
+- Include both UP and DOWN migration sections
+
+### Validation and Error Handling
+```sql
+-- Validate UUID format before operations
+DO $$
+BEGIN
+    IF NOT is_valid_uuid('some-uuid-string') THEN
+        RAISE EXCEPTION 'Invalid UUID format';
+    END IF;
+END $$;
+
+-- Check record existence before operations
+DO $$
+BEGIN
+    IF NOT record_exists_and_active('sr_my_service.my_table', 123) THEN
+        RAISE EXCEPTION 'Record does not exist or is deleted';
+    END IF;
+END $$;
+```
+
+## Migration Scripts Requirements
+All migration scripts should include:
+- Optimizers for indexing columns using global utilities
+- Utility functions for auto-updating `updated_at` column (from global migrations)
+- Default values for `created_at` column using `get_utc_timestamp()`
+- Proper indexing strategies for performance using global index functions
+- Soft delete behavior using global soft delete functions
+- UUID generation using `generate_uuid()` function
+- Proper error handling and validation using global utility functions
